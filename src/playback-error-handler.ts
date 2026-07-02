@@ -7,12 +7,23 @@ type EventMap = EventMapOf<PlayerManager>;
 
 let currentVideo: HTMLVideoElement | null = null;
 
+const VIDEO_ERROR_CODES: Record<number, string> = {
+  1: 'MEDIA_ERR_ABORTED',
+  2: 'MEDIA_ERR_NETWORK',
+  3: 'MEDIA_ERR_DECODE',
+  4: 'MEDIA_ERR_SRC_NOT_SUPPORTED'
+};
+
 function handleVideoError(this: HTMLVideoElement) {
   const err = this.error;
-  console.error(
-    '[playback-error-handler] Video element error',
-    err ? { code: err.code, message: err.message } : 'unknown'
-  );
+  if (err) {
+    const codeName = VIDEO_ERROR_CODES[err.code] ?? `code ${err.code}`;
+    console.error(
+      `[playback-error-handler] Video element error: ${codeName} — ${err.message}`
+    );
+  } else {
+    console.error('[playback-error-handler] Video element error: unknown');
+  }
 }
 
 function handleVideoAbort(this: HTMLVideoElement) {
@@ -48,9 +59,28 @@ function handleNewVideo(this: PlayerManager, _: EventMap['newVideo']) {
 
 function handlePlaybackError(this: PlayerManager, _: EventMap['playbackError']) {
   const videoData = this.player.getVideoData();
-  console.error('[playback-error-handler] Player error state detected', {
-    videoId: videoData.video_id
-  });
+  const playerState = this.player.getPlayerStateObject();
+
+  const activeStates = (Object.entries(playerState) as [string, boolean][])
+    .filter(([, v]) => v)
+    .map(([k]) => k)
+    .join(', ');
+
+  const videoErr = currentVideo?.error;
+  const videoErrDesc = videoErr
+    ? `${VIDEO_ERROR_CODES[videoErr.code] ?? `code ${videoErr.code}`}: ${videoErr.message}`
+    : null;
+
+  const parts = [
+    `videoId=${videoData.video_id ?? 'unknown'}`,
+    videoData.title ? `title="${videoData.title}"` : null,
+    activeStates ? `playerState=[${activeStates}]` : null,
+    videoErrDesc ? `videoError=${videoErrDesc}` : null
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  console.error(`[playback-error-handler] Player error state detected: ${parts}`);
 }
 
 playerManager.addEventListener('newVideo', handleNewVideo);
