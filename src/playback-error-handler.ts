@@ -1,0 +1,57 @@
+import { getPlayerManager } from './player_api';
+import type { EventMapOf, PlayerManager } from './player_api';
+
+const playerManager = await getPlayerManager();
+
+type EventMap = EventMapOf<PlayerManager>;
+
+let currentVideo: HTMLVideoElement | null = null;
+
+function handleVideoError(this: HTMLVideoElement) {
+  const err = this.error;
+  console.error(
+    '[playback-error-handler] Video element error',
+    err ? { code: err.code, message: err.message } : 'unknown'
+  );
+}
+
+function handleVideoAbort(this: HTMLVideoElement) {
+  console.warn('[playback-error-handler] Video playback aborted');
+}
+
+function handleVideoStalled(this: HTMLVideoElement) {
+  console.warn('[playback-error-handler] Video playback stalled');
+}
+
+function attachVideoListeners(video: HTMLVideoElement) {
+  video.addEventListener('error', handleVideoError);
+  video.addEventListener('abort', handleVideoAbort);
+  video.addEventListener('stalled', handleVideoStalled);
+}
+
+function detachVideoListeners(video: HTMLVideoElement) {
+  video.removeEventListener('error', handleVideoError);
+  video.removeEventListener('abort', handleVideoAbort);
+  video.removeEventListener('stalled', handleVideoStalled);
+}
+
+function handleNewVideo(this: PlayerManager, _: EventMap['newVideo']) {
+  if (currentVideo) {
+    detachVideoListeners(currentVideo);
+  }
+  const video = document.querySelector('video');
+  if (video) {
+    currentVideo = video;
+    attachVideoListeners(video);
+  }
+}
+
+function handlePlaybackError(this: PlayerManager, _: EventMap['playbackError']) {
+  const videoData = this.player.getVideoData();
+  console.error('[playback-error-handler] Player error state detected', {
+    videoId: videoData.video_id
+  });
+}
+
+playerManager.addEventListener('newVideo', handleNewVideo);
+playerManager.addEventListener('playbackError', handlePlaybackError);
