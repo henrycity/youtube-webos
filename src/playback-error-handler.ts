@@ -10,8 +10,7 @@ let currentVideo: HTMLVideoElement | null = null;
 function handleVideoError(this: HTMLVideoElement) {
   const err = this.error;
   console.error(
-    '[playback-error-handler] Video element error',
-    err ? { code: err.code, message: err.message } : 'unknown'
+    `[playback-error-handler] Video element error ${JSON.stringify(err ? { code: err.code, message: err.message } : null)}`
   );
 }
 
@@ -48,9 +47,17 @@ function handleNewVideo(this: PlayerManager, _: EventMap['newVideo']) {
 
 function handlePlaybackError(this: PlayerManager, _: EventMap['playbackError']) {
   const videoData = this.player.getVideoData();
-  console.error('[playback-error-handler] Player error state detected', {
-    videoId: videoData.video_id
-  });
+  const playerState = this.player.getPlayerStateObject();
+  const videoErr = currentVideo?.error;
+
+  console.error(
+    `[playback-error-handler] Player error state detected ${JSON.stringify({
+      videoId: videoData.video_id,
+      title: videoData.title,
+      playerState,
+      videoError: videoErr ? { code: videoErr.code, message: videoErr.message } : null
+    })}`
+  );
 }
 
 playerManager.addEventListener('newVideo', handleNewVideo);

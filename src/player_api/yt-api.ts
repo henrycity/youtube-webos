@@ -23,6 +23,7 @@ export type VideoID = string;
 
 export interface VideoData {
   video_id: VideoID | undefined;
+  title: string | undefined;
 }
 
 export type PlayerStateKeys =
