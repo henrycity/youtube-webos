@@ -45,7 +45,7 @@ function handleNewVideo(this: PlayerManager, _: EventMap['newVideo']) {
   }
 }
 
-function handlePlaybackError(this: PlayerManager, _: EventMap['playbackError']) {
+function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError']) {
   const videoData = this.player.getVideoData();
   const playerState = this.player.getPlayerStateObject();
   const videoErr = currentVideo?.error;
@@ -56,6 +56,13 @@ function handlePlaybackError(this: PlayerManager, _: EventMap['playbackError']) 
     playerState,
     videoError: videoErr ? { code: videoErr.code, message: videoErr.message } : null
   };
+
+  // Log the event object from the callback for debugging
+  console.debug('[playback-error-handler] Playback error event:', {
+    type: event.type,
+    detail: event.detail,
+    currentTarget: event.currentTarget
+  });
 
   // If there's no actual video element error (videoError is null) but the player
   // thinks there's an error, this is likely a false positive or a transient state.
