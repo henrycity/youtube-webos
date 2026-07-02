@@ -72,6 +72,12 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
     return;
   }
 
+  // If the video is currently buffering, it's not an error - just wait for it to resume
+  if (playerState.isBuffering) {
+    console.info('[playback-error-handler] Video is buffering, not treating as error');
+    return;
+  }
+
   // If there's no actual video element error (videoError is null) but the player
   // thinks there's an error, this is likely a false positive caused by SABR backoff.
   // Attempt recovery by resuming playback without reloading the video.
