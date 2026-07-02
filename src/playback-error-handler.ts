@@ -80,24 +80,43 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
       try {
         console.warn('[playback-error-handler] Attempting to recover from false positive error by resuming playback');
         
-        // Strategy 1: Simple play attempt
+        // Strategy 1: Try to pause and then play to reset state
+        try {
+          currentVideo.pause();
+        } catch {
+          // Ignore pause errors
+        }
+        
         const playPromise = currentVideo.play();
         if (playPromise !== undefined) {
           playPromise.catch((err) => {
             console.warn('[playback-error-handler] Simple play recovery failed:', err);
             
-            // Strategy 2: If simple play fails, try clearing the error by reloading
+            // Strategy 2: If simple play fails, reload video with careful timing
             try {
               console.warn('[playback-error-handler] Attempting alternative recovery: reloading video element');
-              const currentTime = currentVideo?.currentTime || 0;
+              const currentTime = currentVideo?.currentTime ?? 0;
+              const wasPaused = currentVideo?.paused ?? true;
+              
+              // Reload the video element to clear internal state
               currentVideo?.load();
-              // Wait a bit for load to initialize before setting time and playing
-              if (currentVideo) {
-                currentVideo.currentTime = currentTime;
-                currentVideo.play().catch(() => {
-                  console.warn('[playback-error-handler] Reload recovery also failed');
-                });
-              }
+              
+              // Restore position after a small delay to allow load to initialize
+              setTimeout(() => {
+                if (currentVideo) {
+                  try {
+                    currentVideo.currentTime = currentTime;
+                    // Only try to play if it wasn't paused before the error
+                    if (!wasPaused) {
+                      currentVideo.play().catch(() => {
+                        console.warn('[playback-error-handler] Reload recovery play failed');
+                      });
+                    }
+                  } catch (timeErr) {
+                    console.warn('[playback-error-handler] Reload recovery time restore failed:', timeErr);
+                  }
+                }
+              }, 100);
             } catch (reloadErr) {
               console.warn('[playback-error-handler] Reload recovery attempt failed:', reloadErr);
             }
