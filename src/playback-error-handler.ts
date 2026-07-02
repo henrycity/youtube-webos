@@ -58,11 +58,13 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
   };
 
   // Log the event object from the callback for debugging
-  console.error('[playback-error-handler] Playback error event:', {
-    type: event.type,
-    detail: event.detail,
-    currentTarget: event.currentTarget
-  });
+  console.error(
+    `[playback-error-handler] Playback error event ${JSON.stringify({
+      type: event.type,
+      detail: event.detail,
+      currentTarget: event.currentTarget?.constructor?.name ?? null
+    })}`
+  );
 
   // If there's no actual video element error (videoError is null) but the player
   // thinks there's an error, this is likely a false positive or a transient state.
