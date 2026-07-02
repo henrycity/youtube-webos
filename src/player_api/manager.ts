@@ -27,6 +27,7 @@ function diffPlayerState(
 interface EventMap {
   newVideo: CustomEvent<VideoID>;
   playbackStart: CustomEvent<undefined>;
+  playbackError: CustomEvent<undefined>;
 }
 
 export enum PlayerMode {
@@ -70,6 +71,10 @@ class PlayerManager
 
     if (diff.isPlaying) {
       this.dispatchEvent(new TypedCustomEvent('playbackStart'));
+    }
+
+    if (diff.isError === true) {
+      this.dispatchEvent(new TypedCustomEvent('playbackError'));
     }
   };
 
