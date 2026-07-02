@@ -52,6 +52,8 @@ function stringify(
       };
       if (!hadFlag) {
         console.info(`[JSON.stringify] Set isInlinePlaybackNoAd (was missing)`);
+      } else {
+        console.debug(`[JSON.stringify] Flag already set on object, rebuilt context anyway`);
       }
     }
   }
