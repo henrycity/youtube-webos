@@ -80,6 +80,27 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
       try {
         console.warn('[playback-error-handler] Attempting to recover from false positive error by resuming playback');
         
+        // Check if video has sources - if not, load() was needed
+        const hasSource = currentVideo.src || (currentVideo.children.length > 0 && 
+          Array.from(currentVideo.children).some(child => child.tagName === 'SOURCE'));
+        
+        if (!hasSource) {
+          console.warn('[playback-error-handler] Video element has no source, forcing reload');
+          // Need to reload to restore video source
+          currentVideo.load();
+          // Wait for load event before attempting play
+          const loadHandler = () => {
+            currentVideo?.removeEventListener('loadedmetadata', loadHandler);
+            setTimeout(() => {
+              currentVideo?.play().catch(() => {
+                console.warn('[playback-error-handler] Play after source load failed');
+              });
+            }, 50);
+          };
+          currentVideo.addEventListener('loadedmetadata', loadHandler, { once: true });
+          return;
+        }
+        
         // Strategy 1: Try to pause and then play to reset state
         try {
           currentVideo.pause();
@@ -101,22 +122,25 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
               // Reload the video element to clear internal state
               currentVideo?.load();
               
-              // Restore position after a small delay to allow load to initialize
+              // Restore position after a longer delay to allow load to complete
               setTimeout(() => {
                 if (currentVideo) {
                   try {
                     currentVideo.currentTime = currentTime;
                     // Only try to play if it wasn't paused before the error
                     if (!wasPaused) {
-                      currentVideo.play().catch(() => {
-                        console.warn('[playback-error-handler] Reload recovery play failed');
-                      });
+                      const retryPlay = currentVideo.play();
+                      if (retryPlay !== undefined) {
+                        retryPlay.catch(() => {
+                          console.warn('[playback-error-handler] Reload recovery play failed after delay');
+                        });
+                      }
                     }
                   } catch (timeErr) {
                     console.warn('[playback-error-handler] Reload recovery time restore failed:', timeErr);
                   }
                 }
-              }, 100);
+              }, 250);
             } catch (reloadErr) {
               console.warn('[playback-error-handler] Reload recovery attempt failed:', reloadErr);
             }
