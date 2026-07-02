@@ -6,6 +6,8 @@ const playerManager = await getPlayerManager();
 type EventMap = EventMapOf<PlayerManager>;
 
 let currentVideo: HTMLVideoElement | null = null;
+let bufferingStartTime: number | null = null;
+const BUFFERING_TIMEOUT_MS = 15000; // 15 seconds - max time to wait for buffering to complete
 
 function handleVideoError(this: HTMLVideoElement) {
   const err = this.error;
@@ -72,10 +74,37 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
     return;
   }
 
-  // If the video is currently buffering, it's not an error - just wait for it to resume
+  // If the video is currently buffering, check if it's been buffering too long
   if (playerState.isBuffering) {
-    console.info('[playback-error-handler] Video is buffering, not treating as error');
-    return;
+    const now = Date.now();
+    
+    // First time seeing buffering state
+    if (bufferingStartTime === null) {
+      bufferingStartTime = now;
+      console.info('[playback-error-handler] Video started buffering');
+      return;
+    }
+    
+    const bufferingDuration = now - bufferingStartTime;
+    
+    // If buffering is taking too long, it's probably stuck - attempt recovery
+    if (bufferingDuration > BUFFERING_TIMEOUT_MS) {
+      console.warn(
+        `[playback-error-handler] Video has been buffering for ${bufferingDuration}ms (timeout: ${BUFFERING_TIMEOUT_MS}ms), attempting recovery`
+      );
+      bufferingStartTime = null;
+      // Fall through to attempt recovery
+    } else {
+      // Buffering is still within normal timeframe, wait for it to complete
+      console.info('[playback-error-handler] Video is buffering (duration: ' + bufferingDuration + 'ms), waiting...');
+      return;
+    }
+  } else {
+    // Video is no longer buffering - reset the timer
+    if (bufferingStartTime !== null) {
+      console.info('[playback-error-handler] Video finished buffering');
+      bufferingStartTime = null;
+    }
   }
 
   // If there's no actual video element error (videoError is null) but the player
