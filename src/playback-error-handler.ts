@@ -58,7 +58,7 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
   };
 
   // Log the event object from the callback for debugging
-  console.debug('[playback-error-handler] Playback error event:', {
+  console.error('[playback-error-handler] Playback error event:', {
     type: event.type,
     detail: event.detail,
     currentTarget: event.currentTarget
