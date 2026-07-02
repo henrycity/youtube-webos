@@ -50,13 +50,27 @@ function handlePlaybackError(this: PlayerManager, _: EventMap['playbackError']) 
   const playerState = this.player.getPlayerStateObject();
   const videoErr = currentVideo?.error;
 
+  const errorInfo = {
+    videoId: videoData.video_id,
+    title: videoData.title,
+    playerState,
+    videoError: videoErr ? { code: videoErr.code, message: videoErr.message } : null
+  };
+
+  // If there's no actual video element error (videoError is null) but the player
+  // thinks there's an error, this is likely a false positive or a transient state.
+  // This can happen due to SABR backoff or other temporary player issues.
+  // Log at a lower level since there's no actual video element error.
+  if (!videoErr) {
+    console.warn(
+      `[playback-error-handler] Player reported error state but no video element error detected ${JSON.stringify(errorInfo)}`
+    );
+    return;
+  }
+
+  // There's an actual video element error - log it as a real error
   console.error(
-    `[playback-error-handler] Player error state detected ${JSON.stringify({
-      videoId: videoData.video_id,
-      title: videoData.title,
-      playerState,
-      videoError: videoErr ? { code: videoErr.code, message: videoErr.message } : null
-    })}`
+    `[playback-error-handler] Player error state detected with video element error ${JSON.stringify(errorInfo)}`
   );
 }
 
