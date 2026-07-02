@@ -39,6 +39,7 @@ function stringify(
     // the flag is consistently set, even if it appears to already be true
     // on YouTube's locked object.
     if (!isPrimitive(ctx)) {
+      const hadFlag = ctx!.isInlinePlaybackNoAd === true;
       value = {
         ...holder,
         playbackContext: {
@@ -49,10 +50,8 @@ function stringify(
           }
         }
       };
-      // Only log if we didn't already log this for the current context
-      // (to avoid spam - we check the original context's status)
-      if (ctx!.isInlinePlaybackNoAd !== true) {
-        console.info(`[JSON.stringify] Set isInlinePlaybackNoAd`);
+      if (!hadFlag) {
+        console.info(`[JSON.stringify] Set isInlinePlaybackNoAd (was missing)`);
       }
     }
   }
