@@ -66,6 +66,12 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
     })}`
   );
 
+  // If the video has ended naturally, this is not an error - just log and return
+  if (playerState.isEnded) {
+    console.info('[playback-error-handler] Video has ended naturally, not treating as error');
+    return;
+  }
+
   // If there's no actual video element error (videoError is null) but the player
   // thinks there's an error, this is likely a false positive caused by SABR backoff.
   // Attempt recovery by resuming playback without reloading the video.
