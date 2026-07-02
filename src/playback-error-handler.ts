@@ -78,7 +78,7 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
     // This helps recover from SABR backoff false positives
     if (currentVideo) {
       try {
-        console.info('[playback-error-handler] Attempting to recover from false positive error by resuming playback');
+        console.warn('[playback-error-handler] Attempting to recover from false positive error by resuming playback');
         
         // Strategy 1: Simple play attempt
         const playPromise = currentVideo.play();
@@ -88,7 +88,7 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
             
             // Strategy 2: If simple play fails, try clearing the error by reloading
             try {
-              console.info('[playback-error-handler] Attempting alternative recovery: reloading video element');
+              console.warn('[playback-error-handler] Attempting alternative recovery: reloading video element');
               const currentTime = currentVideo?.currentTime || 0;
               currentVideo?.load();
               // Wait a bit for load to initialize before setting time and playing
