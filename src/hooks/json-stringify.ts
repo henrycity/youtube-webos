@@ -40,6 +40,23 @@ function stringify(
     // on YouTube's locked object.
     if (!isPrimitive(ctx)) {
       const hadFlag = ctx!.isInlinePlaybackNoAd === true;
+      
+      // Log detailed information about the context object
+      const ctxKeys = Object.keys(ctx!);
+      const descriptor = Object.getOwnPropertyDescriptor(ctx!, 'isInlinePlaybackNoAd');
+      
+      console.debug(`[JSON.stringify] Found contentPlaybackContext with ${ctxKeys.length} properties, rebuilding...`, {
+        hadFlag,
+        isInlinePlaybackNoAdPresent: 'isInlinePlaybackNoAd' in ctx!,
+        descriptor: descriptor ? {
+          writable: descriptor.writable,
+          configurable: descriptor.configurable,
+          enumerable: descriptor.enumerable,
+          value: descriptor.value
+        } : 'undefined',
+        contextType: Object.prototype.toString.call(ctx!).slice(8, -1)
+      });
+      
       value = {
         ...holder,
         playbackContext: {
@@ -50,10 +67,11 @@ function stringify(
           }
         }
       };
+      
       if (!hadFlag) {
-        console.info(`[JSON.stringify] Set isInlinePlaybackNoAd (was missing)`);
+        console.info(`[JSON.stringify] Set isInlinePlaybackNoAd=true (was missing)`);
       } else {
-        console.debug(`[JSON.stringify] Flag already set on object, rebuilt context anyway`);
+        console.debug(`[JSON.stringify] Flag already set on object, rebuilt context anyway to bypass property locking`);
       }
     }
   }

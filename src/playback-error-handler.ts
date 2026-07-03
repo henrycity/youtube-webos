@@ -9,10 +9,47 @@ let currentVideo: HTMLVideoElement | null = null;
 let bufferingStartTime: number | null = null;
 const BUFFERING_TIMEOUT_MS = 15000; // 15 seconds - max time to wait for buffering to complete
 
+function getVideoElementState(video: HTMLVideoElement) {
+  try {
+    const readyStateNames = ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'];
+    const networkStateNames = ['NETWORK_EMPTY', 'NETWORK_IDLE', 'NETWORK_LOADING', 'NETWORK_NO_SOURCE'];
+    
+    let bufferedInfo = '';
+    try {
+      if (video.buffered.length > 0) {
+        const lastBuffer = video.buffered.length - 1;
+        const bufferedEnd = video.buffered.end(lastBuffer);
+        const percentBuffered = video.duration > 0 ? ((bufferedEnd / video.duration) * 100).toFixed(1) : 'N/A';
+        bufferedInfo = `${percentBuffered}% (${bufferedEnd.toFixed(1)}s/${video.duration.toFixed(1)}s)`;
+      } else {
+        bufferedInfo = '0%';
+      }
+    } catch {
+      bufferedInfo = 'error';
+    }
+    
+    return {
+      readyState: `${video.readyState} (${readyStateNames[video.readyState] || 'UNKNOWN'})`,
+      networkState: `${video.networkState} (${networkStateNames[video.networkState] || 'UNKNOWN'})`,
+      paused: video.paused,
+      currentTime: video.currentTime.toFixed(2),
+      duration: video.duration.toFixed(2),
+      buffered: bufferedInfo,
+      src: video.src ? '(has src)' : '(no src)',
+      sourceCount: Array.from(video.children).filter(c => c.tagName === 'SOURCE').length
+    };
+  } catch (e) {
+    return { error: String(e) };
+  }
+}
+
 function handleVideoError(this: HTMLVideoElement) {
   const err = this.error;
   console.error(
-    `[playback-error-handler] Video element error ${JSON.stringify(err ? { code: err.code, message: err.message } : null)}`
+    `[playback-error-handler] Video element error ${JSON.stringify({
+      error: err ? { code: err.code, message: err.message } : null,
+      videoState: getVideoElementState(this)
+    })}`
   );
 }
 
@@ -51,12 +88,14 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
   const videoData = this.player.getVideoData();
   const playerState = this.player.getPlayerStateObject();
   const videoErr = currentVideo?.error;
+  const videoElementState = currentVideo ? getVideoElementState(currentVideo) : null;
 
   const errorInfo = {
     videoId: videoData.video_id,
     title: videoData.title,
     playerState,
-    videoError: videoErr ? { code: videoErr.code, message: videoErr.message } : null
+    videoError: videoErr ? { code: videoErr.code, message: videoErr.message } : null,
+    videoElement: videoElementState
   };
 
   // Log the event object from the callback for debugging
@@ -90,7 +129,11 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
     // If buffering is taking too long, it's probably stuck - attempt recovery
     if (bufferingDuration > BUFFERING_TIMEOUT_MS) {
       console.warn(
-        `[playback-error-handler] Video has been buffering for ${bufferingDuration}ms (timeout: ${BUFFERING_TIMEOUT_MS}ms), attempting recovery`
+        `[playback-error-handler] Video has been buffering for ${bufferingDuration}ms (timeout: ${BUFFERING_TIMEOUT_MS}ms), attempting recovery ${JSON.stringify({
+          videoId: videoData.video_id,
+          currentTime: currentVideo?.currentTime ?? 'N/A',
+          duration: currentVideo?.duration ?? 'N/A'
+        })}`
       );
       bufferingStartTime = null;
       // Fall through to attempt recovery
@@ -112,14 +155,18 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
   // Attempt recovery by resuming playback without reloading the video.
   if (!videoErr) {
     console.warn(
-      `[playback-error-handler] Player reported error state but no video element error detected ${JSON.stringify(errorInfo)}`
+      `[playback-error-handler] FALSE POSITIVE: Player reported error state but no video element error detected ${JSON.stringify(errorInfo)}`
     );
     
     // Attempt recovery: try to resume playback from the current position
     // This helps recover from SABR backoff false positives
     if (currentVideo) {
       try {
-        console.warn('[playback-error-handler] Attempting to recover from false positive error by resuming playback');
+        console.warn('[playback-error-handler] Attempting to recover from false positive error by resuming playback', {
+          currentTime: currentVideo.currentTime.toFixed(2),
+          duration: currentVideo.duration.toFixed(2),
+          paused: currentVideo.paused
+        });
         
         // Check if video has sources - if not, load() was needed
         const hasSource = currentVideo.src || (currentVideo.children.length > 0 && 
@@ -196,7 +243,7 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
 
   // There's an actual video element error - log it as a real error
   console.error(
-    `[playback-error-handler] Player error state detected with video element error ${JSON.stringify(errorInfo)}`
+    `[playback-error-handler] REAL ERROR: Player error state detected with video element error ${JSON.stringify(errorInfo)}`
   );
 }
 
