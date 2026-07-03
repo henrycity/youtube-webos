@@ -10,7 +10,10 @@ let currentVideo: HTMLVideoElement | null = null;
 let bufferingStartTime: number | null = null;
 let lastPlayerState: PlayerStateObject | null = null;
 let errorOccurrenceTime: number | null = null;
+let falsePositiveCount = 0; // Track consecutive false positives
+let lastRecoveryAttemptTime: number | null = null;
 const BUFFERING_TIMEOUT_MS = 15000; // 15 seconds - max time to wait for buffering to complete
+const MIN_TIME_BETWEEN_RECOVERY_MS = 5000; // Minimum 5 seconds between recovery attempts
 
 function getVideoElementState(video: HTMLVideoElement) {
   try {
@@ -84,6 +87,11 @@ function handleNewVideo(this: PlayerManager, _: EventMap['newVideo']) {
   if (video) {
     currentVideo = video;
     attachVideoListeners(video);
+    // Reset tracking for new video
+    falsePositiveCount = 0;
+    errorOccurrenceTime = null;
+    lastRecoveryAttemptTime = null;
+    bufferingStartTime = null;
   }
 }
 
@@ -174,15 +182,32 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
   if (!videoErr) {
     const now = Date.now();
     const timeSinceLastError = errorOccurrenceTime !== null ? now - errorOccurrenceTime : null;
+    const timeSinceLastRecovery = lastRecoveryAttemptTime !== null ? now - lastRecoveryAttemptTime : null;
+    
+    // Track consecutive false positives
+    falsePositiveCount++;
+    
+    const shouldAttemptRecovery = lastRecoveryAttemptTime === null || 
+      (timeSinceLastRecovery !== null && timeSinceLastRecovery >= MIN_TIME_BETWEEN_RECOVERY_MS);
     
     console.warn(
-      `[playback-error-handler] FALSE POSITIVE: Player reported error state but no video element error detected ${JSON.stringify({
+      `[playback-error-handler] FALSE POSITIVE #${falsePositiveCount}: Player reported error state but no video element error detected ${JSON.stringify({
         ...errorInfo,
-        timeSinceLastError: timeSinceLastError !== null ? `${timeSinceLastError}ms` : 'first occurrence'
+        timeSinceLastError: timeSinceLastError !== null ? `${timeSinceLastError}ms` : 'first occurrence',
+        timeSinceLastRecovery: timeSinceLastRecovery !== null ? `${timeSinceLastRecovery}ms` : 'no prior recovery',
+        shouldAttemptRecovery
       })}`
     );
     
     errorOccurrenceTime = now;
+    
+    // Rate-limit recovery attempts to prevent excessive thrashing
+    if (!shouldAttemptRecovery) {
+      console.warn(`[playback-error-handler] Skipping recovery attempt (too soon after last attempt)`);
+      return;
+    }
+    
+    lastRecoveryAttemptTime = now;
     
     // Attempt recovery: try to resume playback from the current position
     // This helps recover from SABR backoff false positives
@@ -191,7 +216,8 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
         console.warn('[playback-error-handler] Attempting to recover from false positive error by resuming playback', {
           currentTime: currentVideo.currentTime.toFixed(2),
           duration: currentVideo.duration.toFixed(2),
-          paused: currentVideo.paused
+          paused: currentVideo.paused,
+          falsePositiveCount
         });
         
         // Check if video has sources - if not, load() was needed
@@ -269,8 +295,12 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
 
   // There's an actual video element error - log it as a real error
   errorOccurrenceTime = null;
+  falsePositiveCount = 0; // Reset false positive counter when we see a real error
   console.error(
-    `[playback-error-handler] REAL ERROR: Player error state detected with video element error ${JSON.stringify(errorInfo)}`
+    `[playback-error-handler] REAL ERROR: Player error state detected with video element error ${JSON.stringify({
+      ...errorInfo,
+      priorFalsePositives: 'count was ' + (falsePositiveCount > 1 ? falsePositiveCount - 1 : 'none')
+    })}`
   );
 }
 
