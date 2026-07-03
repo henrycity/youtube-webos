@@ -13,7 +13,11 @@ let errorOccurrenceTime: number | null = null;
 let consecutiveFalsePositiveCount = 0; // Track consecutive false positives
 let lastRecoveryAttemptTime: number | null = null;
 const BUFFERING_TIMEOUT_MS = 15000; // 15 seconds - max time to wait for buffering to complete
-const MIN_TIME_BETWEEN_RECOVERY_MS = 5000; // Minimum 5 seconds between recovery attempts
+const MIN_TIME_BETWEEN_RECOVERY_MS = 5000; // Minimum 5000 milliseconds between recovery attempts
+
+// State names for debugging and logging
+const READY_STATE_NAMES = ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'];
+const NETWORK_STATE_NAMES = ['NETWORK_EMPTY', 'NETWORK_IDLE', 'NETWORK_LOADING', 'NETWORK_NO_SOURCE'];
 
 // Helper to safely format timing values (handles Infinity/NaN)
 function formatTime(time: number): string {
@@ -23,9 +27,6 @@ function formatTime(time: number): string {
 
 function getVideoElementState(video: HTMLVideoElement) {
   try {
-    const readyStateNames = ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'];
-    const networkStateNames = ['NETWORK_EMPTY', 'NETWORK_IDLE', 'NETWORK_LOADING', 'NETWORK_NO_SOURCE'];
-    
     let bufferedInfo = '';
     try {
       if (video.buffered.length > 0 && isFinite(video.duration) && video.duration > 0) {
@@ -41,8 +42,8 @@ function getVideoElementState(video: HTMLVideoElement) {
     }
     
     return {
-      readyState: `${video.readyState} (${readyStateNames[video.readyState] || 'UNKNOWN'})`,
-      networkState: `${video.networkState} (${networkStateNames[video.networkState] || 'UNKNOWN'})`,
+      readyState: `${video.readyState} (${READY_STATE_NAMES[video.readyState] || 'UNKNOWN'})`,
+      networkState: `${video.networkState} (${NETWORK_STATE_NAMES[video.networkState] || 'UNKNOWN'})`,
       paused: video.paused,
       currentTime: formatTime(video.currentTime),
       duration: formatTime(video.duration),
@@ -167,8 +168,8 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
       console.warn(
         `[playback-error-handler] Video has been buffering for ${bufferingDuration}ms (timeout: ${BUFFERING_TIMEOUT_MS}ms), attempting recovery ${JSON.stringify({
           videoId: videoData.video_id,
-          currentTime: currentVideo?.currentTime ?? 'N/A',
-          duration: currentVideo?.duration ?? 'N/A'
+         currentTime: formatTime(currentVideo?.currentTime ?? NaN),
+         duration: formatTime(currentVideo?.duration ?? NaN)
         })}`
       );
       bufferingStartTime = null;
@@ -223,12 +224,12 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
     // This helps recover from SABR backoff false positives
     if (currentVideo) {
       try {
-        console.warn('[playback-error-handler] Attempting to recover from false positive error by resuming playback', {
+        console.warn(`[playback-error-handler] Attempting to recover from false positive error by resuming playback ${JSON.stringify({
           currentTime: formatTime(currentVideo.currentTime),
           duration: formatTime(currentVideo.duration),
           paused: currentVideo.paused,
           consecutiveFalsePositiveCount
-        });
+        })}`);
         
         // Check if video has sources - if not, load() was needed
         const hasSource = currentVideo.src || (currentVideo.children.length > 0 && 
