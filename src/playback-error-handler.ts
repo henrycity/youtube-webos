@@ -87,7 +87,9 @@ function handleNewVideo(this: PlayerManager, _: EventMap['newVideo']) {
   if (video) {
     currentVideo = video;
     attachVideoListeners(video);
-    // Reset tracking for new video
+    // Reset all tracking state for the new video to ensure clean state
+    // This prevents false positive counts and buffering timeouts from previous
+    // videos from affecting the new video playback
     falsePositiveCount = 0;
     errorOccurrenceTime = null;
     lastRecoveryAttemptTime = null;
@@ -107,9 +109,11 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
   }
   
   const stateChanges: string[] = [];
+  // After the check above, lastPlayerState is guaranteed to be non-null
+  const prevState = lastPlayerState;
   (Object.keys(playerState) as Array<keyof PlayerStateObject>).forEach(key => {
-    if (lastPlayerState![key] !== playerState[key]) {
-      stateChanges.push(`${key}: ${lastPlayerState![key]} -> ${playerState[key]}`);
+    if (prevState[key] !== playerState[key]) {
+      stateChanges.push(`${key}: ${prevState[key]} -> ${playerState[key]}`);
     }
   });
   lastPlayerState = playerState;
@@ -294,12 +298,13 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
   }
 
   // There's an actual video element error - log it as a real error
+  const priorFalsePositiveCount = falsePositiveCount;
   errorOccurrenceTime = null;
   falsePositiveCount = 0; // Reset false positive counter when we see a real error
   console.error(
     `[playback-error-handler] REAL ERROR: Player error state detected with video element error ${JSON.stringify({
       ...errorInfo,
-      priorFalsePositives: 'count was ' + (falsePositiveCount > 1 ? falsePositiveCount - 1 : 'none')
+      priorFalsePositives: priorFalsePositiveCount > 0 ? priorFalsePositiveCount : 'none'
     })}`
   );
 }
