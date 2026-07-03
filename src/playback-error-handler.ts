@@ -1,5 +1,6 @@
 import { getPlayerManager } from './player_api';
 import type { EventMapOf, PlayerManager } from './player_api';
+import type { PlayerStateObject } from './player_api/yt-api';
 
 const playerManager = await getPlayerManager();
 
@@ -7,6 +8,8 @@ type EventMap = EventMapOf<PlayerManager>;
 
 let currentVideo: HTMLVideoElement | null = null;
 let bufferingStartTime: number | null = null;
+let lastPlayerState: PlayerStateObject | null = null;
+let errorOccurrenceTime: number | null = null;
 const BUFFERING_TIMEOUT_MS = 15000; // 15 seconds - max time to wait for buffering to complete
 
 function getVideoElementState(video: HTMLVideoElement) {
@@ -89,13 +92,27 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
   const playerState = this.player.getPlayerStateObject();
   const videoErr = currentVideo?.error;
   const videoElementState = currentVideo ? getVideoElementState(currentVideo) : null;
+  
+  // Track state changes to detect error patterns
+  if (lastPlayerState === null) {
+    lastPlayerState = playerState;
+  }
+  
+  const stateChanges: string[] = [];
+  (Object.keys(playerState) as Array<keyof PlayerStateObject>).forEach(key => {
+    if (lastPlayerState![key] !== playerState[key]) {
+      stateChanges.push(`${key}: ${lastPlayerState![key]} -> ${playerState[key]}`);
+    }
+  });
+  lastPlayerState = playerState;
 
   const errorInfo = {
     videoId: videoData.video_id,
     title: videoData.title,
     playerState,
     videoError: videoErr ? { code: videoErr.code, message: videoErr.message } : null,
-    videoElement: videoElementState
+    videoElement: videoElementState,
+    stateChanges: stateChanges.length > 0 ? stateChanges : undefined
   };
 
   // Log the event object from the callback for debugging
@@ -110,6 +127,7 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
   // If the video has ended naturally, this is not an error - just log and return
   if (playerState.isEnded) {
     console.info('[playback-error-handler] Video has ended naturally, not treating as error');
+    errorOccurrenceTime = null;
     return;
   }
 
@@ -154,9 +172,17 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
   // thinks there's an error, this is likely a false positive caused by SABR backoff.
   // Attempt recovery by resuming playback without reloading the video.
   if (!videoErr) {
+    const now = Date.now();
+    const timeSinceLastError = errorOccurrenceTime !== null ? now - errorOccurrenceTime : null;
+    
     console.warn(
-      `[playback-error-handler] FALSE POSITIVE: Player reported error state but no video element error detected ${JSON.stringify(errorInfo)}`
+      `[playback-error-handler] FALSE POSITIVE: Player reported error state but no video element error detected ${JSON.stringify({
+        ...errorInfo,
+        timeSinceLastError: timeSinceLastError !== null ? `${timeSinceLastError}ms` : 'first occurrence'
+      })}`
     );
+    
+    errorOccurrenceTime = now;
     
     // Attempt recovery: try to resume playback from the current position
     // This helps recover from SABR backoff false positives
@@ -242,6 +268,7 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
   }
 
   // There's an actual video element error - log it as a real error
+  errorOccurrenceTime = null;
   console.error(
     `[playback-error-handler] REAL ERROR: Player error state detected with video element error ${JSON.stringify(errorInfo)}`
   );
