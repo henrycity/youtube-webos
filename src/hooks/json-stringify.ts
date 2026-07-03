@@ -72,7 +72,7 @@ function stringify(
       if (!hadFlag) {
         console.info(`[JSON.stringify] Set isInlinePlaybackNoAd=true (was missing)`);
       } else {
-        console.debug(`[JSON.stringify] Flag already set on object, rebuilt context anyway to bypass property locking`);
+        console.debug(`[JSON.stringify] Flag already set on object, rebuilt context anyway to bypass property locking on the original object`);
       }
     }
   }

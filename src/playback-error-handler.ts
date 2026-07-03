@@ -15,16 +15,16 @@ let lastRecoveryAttemptTime: number | null = null;
 const BUFFERING_TIMEOUT_MS = 15000; // 15 seconds - max time to wait for buffering to complete
 const MIN_TIME_BETWEEN_RECOVERY_MS = 5000; // Minimum 5 seconds between recovery attempts
 
+// Helper to safely format timing values (handles Infinity/NaN)
+function formatTime(time: number): string {
+  if (!isFinite(time)) return 'N/A';
+  return time.toFixed(2);
+}
+
 function getVideoElementState(video: HTMLVideoElement) {
   try {
     const readyStateNames = ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'];
     const networkStateNames = ['NETWORK_EMPTY', 'NETWORK_IDLE', 'NETWORK_LOADING', 'NETWORK_NO_SOURCE'];
-    
-    // Helper to safely format timing values
-    const formatTime = (time: number): string => {
-      if (!isFinite(time)) return 'N/A';
-      return time.toFixed(2);
-    };
     
     let bufferedInfo = '';
     try {
@@ -115,7 +115,7 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
   }
   
   const stateChanges: string[] = [];
-  // After the check above, lastPlayerState is guaranteed to be non-null
+  // Store lastPlayerState in a local variable for type safety and clarity
   const prevState = lastPlayerState;
   (Object.keys(playerState) as Array<keyof PlayerStateObject>).forEach(key => {
     if (prevState[key] !== playerState[key]) {
@@ -224,8 +224,8 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
     if (currentVideo) {
       try {
         console.warn('[playback-error-handler] Attempting to recover from false positive error by resuming playback', {
-          currentTime: currentVideo.currentTime.toFixed(2),
-          duration: currentVideo.duration.toFixed(2),
+          currentTime: formatTime(currentVideo.currentTime),
+          duration: formatTime(currentVideo.duration),
           paused: currentVideo.paused,
           consecutiveFalsePositiveCount
         });
