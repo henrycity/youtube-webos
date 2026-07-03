@@ -10,7 +10,7 @@ let currentVideo: HTMLVideoElement | null = null;
 let bufferingStartTime: number | null = null;
 let lastPlayerState: PlayerStateObject | null = null;
 let errorOccurrenceTime: number | null = null;
-let falsePositiveCount = 0; // Track consecutive false positives
+let consecutiveFalsePositiveCount = 0; // Track consecutive false positives
 let lastRecoveryAttemptTime: number | null = null;
 const BUFFERING_TIMEOUT_MS = 15000; // 15 seconds - max time to wait for buffering to complete
 const MIN_TIME_BETWEEN_RECOVERY_MS = 5000; // Minimum 5 seconds between recovery attempts
@@ -20,13 +20,19 @@ function getVideoElementState(video: HTMLVideoElement) {
     const readyStateNames = ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'];
     const networkStateNames = ['NETWORK_EMPTY', 'NETWORK_IDLE', 'NETWORK_LOADING', 'NETWORK_NO_SOURCE'];
     
+    // Helper to safely format timing values
+    const formatTime = (time: number): string => {
+      if (!isFinite(time)) return 'N/A';
+      return time.toFixed(2);
+    };
+    
     let bufferedInfo = '';
     try {
-      if (video.buffered.length > 0) {
+      if (video.buffered.length > 0 && isFinite(video.duration) && video.duration > 0) {
         const lastBuffer = video.buffered.length - 1;
         const bufferedEnd = video.buffered.end(lastBuffer);
-        const percentBuffered = video.duration > 0 ? ((bufferedEnd / video.duration) * 100).toFixed(1) : 'N/A';
-        bufferedInfo = `${percentBuffered}% (${bufferedEnd.toFixed(1)}s/${video.duration.toFixed(1)}s)`;
+        const percentBuffered = ((bufferedEnd / video.duration) * 100).toFixed(1);
+        bufferedInfo = `${percentBuffered}% (${formatTime(bufferedEnd)}s/${formatTime(video.duration)}s)`;
       } else {
         bufferedInfo = '0%';
       }
@@ -38,8 +44,8 @@ function getVideoElementState(video: HTMLVideoElement) {
       readyState: `${video.readyState} (${readyStateNames[video.readyState] || 'UNKNOWN'})`,
       networkState: `${video.networkState} (${networkStateNames[video.networkState] || 'UNKNOWN'})`,
       paused: video.paused,
-      currentTime: video.currentTime.toFixed(2),
-      duration: video.duration.toFixed(2),
+      currentTime: formatTime(video.currentTime),
+      duration: formatTime(video.duration),
       buffered: bufferedInfo,
       src: video.src ? '(has src)' : '(no src)',
       sourceCount: Array.from(video.children).filter(c => c.tagName === 'SOURCE').length
@@ -90,7 +96,7 @@ function handleNewVideo(this: PlayerManager, _: EventMap['newVideo']) {
     // Reset all tracking state for the new video to ensure clean state
     // This prevents false positive counts and buffering timeouts from previous
     // videos from affecting the new video playback
-    falsePositiveCount = 0;
+    consecutiveFalsePositiveCount = 0;
     errorOccurrenceTime = null;
     lastRecoveryAttemptTime = null;
     bufferingStartTime = null;
@@ -189,13 +195,13 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
     const timeSinceLastRecovery = lastRecoveryAttemptTime !== null ? now - lastRecoveryAttemptTime : null;
     
     // Track consecutive false positives
-    falsePositiveCount++;
+    consecutiveFalsePositiveCount++;
     
     const shouldAttemptRecovery = lastRecoveryAttemptTime === null || 
       (timeSinceLastRecovery !== null && timeSinceLastRecovery >= MIN_TIME_BETWEEN_RECOVERY_MS);
     
     console.warn(
-      `[playback-error-handler] FALSE POSITIVE #${falsePositiveCount}: Player reported error state but no video element error detected ${JSON.stringify({
+      `[playback-error-handler] FALSE POSITIVE #${consecutiveFalsePositiveCount}: Player reported error state but no video element error detected ${JSON.stringify({
         ...errorInfo,
         timeSinceLastError: timeSinceLastError !== null ? `${timeSinceLastError}ms` : 'first occurrence',
         timeSinceLastRecovery: timeSinceLastRecovery !== null ? `${timeSinceLastRecovery}ms` : 'no prior recovery',
@@ -221,7 +227,7 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
           currentTime: currentVideo.currentTime.toFixed(2),
           duration: currentVideo.duration.toFixed(2),
           paused: currentVideo.paused,
-          falsePositiveCount
+          consecutiveFalsePositiveCount
         });
         
         // Check if video has sources - if not, load() was needed
@@ -298,9 +304,9 @@ function handlePlaybackError(this: PlayerManager, event: EventMap['playbackError
   }
 
   // There's an actual video element error - log it as a real error
-  const priorFalsePositiveCount = falsePositiveCount;
+  const priorFalsePositiveCount = consecutiveFalsePositiveCount;
   errorOccurrenceTime = null;
-  falsePositiveCount = 0; // Reset false positive counter when we see a real error
+  consecutiveFalsePositiveCount = 0; // Reset false positive counter when we see a real error
   console.error(
     `[playback-error-handler] REAL ERROR: Player error state detected with video element error ${JSON.stringify({
       ...errorInfo,

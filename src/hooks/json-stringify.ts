@@ -45,7 +45,8 @@ function stringify(
       const ctxKeys = Object.keys(ctx!);
       const descriptor = Object.getOwnPropertyDescriptor(ctx!, 'isInlinePlaybackNoAd');
       
-      console.debug(`[JSON.stringify] Found contentPlaybackContext with ${ctxKeys.length} properties, rebuilding...`, {
+      console.debug(`[JSON.stringify] Found contentPlaybackContext, rebuilding...`, {
+        propertyCount: ctxKeys.length,
         hadFlag,
         isInlinePlaybackNoAdPresent: 'isInlinePlaybackNoAd' in ctx!,
         descriptor: descriptor ? {
